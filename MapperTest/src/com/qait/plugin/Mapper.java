@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 
 import javax.xml.ws.LogicalMessage;
 
@@ -23,11 +24,13 @@ public class Mapper {
 	String  rs=null;
 	HtmlReport report=null;
 	String  htmlreportlocation;
+	ArrayList<String[]> mismatchedFunction=new ArrayList<String[]>();
+	
 	public Mapper(String path,String htmlrepotlocation){
 	 this.url=this.url+path;
 	 this.conn_for_method = connect();
-	this.htmlreportlocation=htmlrepotlocation;
-	}
+	 this.htmlreportlocation=htmlrepotlocation;
+	 } 
 	
 
 	/**
@@ -41,7 +44,7 @@ public class Mapper {
 	}
 
 	private Connection connect() {
-		// SQLite connection string
+		// SQLite connect ion string
 		String url = this.url;
 		Connection conn = null;
 		try {
@@ -75,6 +78,11 @@ public class Mapper {
 		}
 	}
 
+	/**
+	 * 
+	 * @param testcaseid
+	 * @param actualfunctionName
+	 */
 	public void insertRow(String testcaseid, String actualfunctionName) {
 		 PreparedStatement psmt=null;
 		 String sql = "INSERT INTO\t"+ this.tablename+"\t (tcid,teststep) VALUES(?,?)";
@@ -85,10 +93,13 @@ public class Mapper {
     	   //log(method_name_in_db_record);
     	   if(method_name_in_db_record.equals(actualfunctionName))
     	   { log(actualfunctionName+"\t method all ready mapped to:\t"+testcaseid);
-    	    report.writeRow(testcaseid, actualfunctionName);
+    	     report.writeRow(testcaseid, actualfunctionName,2);
     	   } else {
     		   log("system found mismatch in mapping name and actual name do you want to replace method name for existin testcase id");
     		   log("[name in db]:\t"+method_name_in_db_record+"\t"+"[actual_name of function]"+actualfunctionName+"\t for "+testcaseid);
+    		   String temp[]={method_name_in_db_record,actualfunctionName,testcaseid};
+    		   update_row_with_new_name(testcaseid, actualfunctionName, method_name_in_db_record);
+    		   mismatchedFunction.add(temp);
     		   log("work still in progress>>>>>>>>>>>>>");
     		   
     	   }
@@ -109,7 +120,7 @@ public class Mapper {
 		} finally {
 			if(res) {
     		  log("inserted one row in db \t"+this.tablename+"with testcase id\t"+testcaseid+"step name \t"+actualfunctionName);
-    	          report.writeRow(testcaseid, actualfunctionName);
+    	          report.writeRow(testcaseid, actualfunctionName,0);
 			}else {
     		  log("some thing went wrong");
     	      }
@@ -118,7 +129,7 @@ public class Mapper {
 				conn_for_method.close();
 				log("connection colsed here");
 			} catch (SQLException e) {
-				log("116************");
+				//log("116************");
 				e.printStackTrace();
 			}
     	  }
@@ -128,6 +139,40 @@ public class Mapper {
 	
 	}
 
+	public void update_row_with_new_name(String testcaseid,String actualfunctionName,String function_name_in_db_record) {
+		 PreparedStatement psmt=null;
+		 boolean res=false;
+		 String sql = "update \t"+ this.tablename+"\t set teststep='"+actualfunctionName+"'\t where tcid="+ testcaseid+"\t AND teststep='"+function_name_in_db_record+"'";
+		 //log(testcaseid+"____________"+actualfunctionName);
+		 log(sql);
+		  hardwait(3);
+	
+		 try {
+   		  conn_for_method=connect();
+   		  psmt= conn_for_method.prepareStatement(sql);
+       	  
+			  wait(5);
+			  psmt.execute();
+			  res=true;
+		} catch (SQLException e) {
+						e.printStackTrace();
+		} finally {
+			if(res) {
+   		  log("inserted one row in db \t"+this.tablename+"with testcase id\t"+testcaseid+"step name \t"+actualfunctionName);
+   	          report.writeRow(testcaseid, actualfunctionName,1);
+			}else {
+   		  log("some thing went wrong");
+   	      }
+			try {
+				psmt.close();
+				conn_for_method.close();
+				log("connection colsed here");
+			} catch (SQLException e) {
+				//log("116************");
+				e.printStackTrace();
+			}
+	}
+		 }
 	
 
 	
@@ -187,7 +232,7 @@ public class Mapper {
 			   return isfound;
 			}
 
-		String sql = "select * from\t" + this.tablename + "\twhere tcid= ?";
+		String sql = "select * from\t" + this.tablename + "\t where tcid= ?";
 
 		try {
 			conn_for_method=connect();
@@ -282,13 +327,17 @@ public class Mapper {
 //			e.printStackTrace();
 //		}
 	}
+	
 	public void writeInHtmlFile(String tcid,String step) {
-		this.report.writeRow(tcid, step);
+		//this.report.writeRow(tcid, step);
 	}
 
 
 	public void writeClosingLineInHtml() {
-		report.writeLast();
+		report.writeLast(mismatchedFunction);
+		for(String[]s:mismatchedFunction) {
+			System.out.println(s[0]+s[1]+s[2]+"#########################################################################################################");
+		}
 		
 	}
 	public void wait(int sec) {
